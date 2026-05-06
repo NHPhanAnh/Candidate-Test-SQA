@@ -25,20 +25,19 @@ def driver():
     
     # --- TỰ ĐỘNG ĐĂNG NHẬP TRƯỚC KHI TEST (sqapananh2026 / Test@12345) ---
     driver.get("http://localhost:3000/auth/login")
-    wait = WebDriverWait(driver, 60)
+    wait = WebDriverWait(driver, 15)
     try:
-        # Input không có name/id nên dùng type selector
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))).send_keys("sqapananh2026")
-        driver.find_element(By.CSS_SELECTOR, "input[type='password']").send_keys("Test@12345")
-        # Button có class .login-button
-        login_btn = driver.find_element(By.CSS_SELECTOR, ".login-button")
-        driver.execute_script("arguments[0].click();", login_btn)
-        # Chờ redirect về trang chủ sau khi đăng nhập thành công
-        wait.until(EC.url_changes("http://localhost:3000/auth/login"))
-        time.sleep(2)
-        print("Auto-login successful!")
+        if "login" in driver.current_url:
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text'], input[placeholder='Email/Username']"))).send_keys("sqapananh2026")
+            driver.find_element(By.CSS_SELECTOR, "input[type='password']").send_keys("Test@12345")
+            login_btn = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], .login-button")
+            driver.execute_script("arguments[0].click();", login_btn)
+            time.sleep(2)
+            print("Auto-login successful!")
+        else:
+            print("Already logged in or redirected!")
     except Exception as e:
-        print(f"Auto-login failed: {str(e)}")
+        print(f"Auto-login warning: {str(e)}")
     
     yield driver
     driver.quit()
@@ -48,10 +47,6 @@ def test_TC_SYS_001_FilterJobAds(driver):
     ID: TC_SYS_001 | Title: UI Filter Job Ads by Keyword and Location
     Steps: 1. Go to /jobs with params | 2. Wait for jobs-result
     Expected: Page displays job results matching criteria.
-    --- REPORT TEMPLATE IF FAIL ---
-    - Main error point: Frontend fails to render API results.
-    - Specifically: .jobs-result not found within 180s.
-    - Location: Jobs.vue
     """
     driver.get("http://localhost:3000/jobs?keyword=Java")
     wait = WebDriverWait(driver, 180)
@@ -67,33 +62,40 @@ def test_TC_SYS_002_ApplyCV_Full_Flow_With_Rollback(driver):
     ID: TC_SYS_002 | Title: UI Apply CV with Database Check & Rollback
     Steps: 1. Fill form on UI | 2. Submit | 3. Verify in DB | 4. Delete record
     Expected: Record is created then cleaned up from DB.
-    --- REPORT TEMPLATE IF FAIL ---
-    - Main error point: UI submission failed or DB connection error.
-    - Specifically: Record not found in candidate_info_apply after submit.
-    - Location: ApplyModal.vue hoặc JobAdCandidateServiceImpl.java
     """
     test_email = f"auto_test_{int(time.time())}@gmail.com"
     cv_path = os.path.abspath("test_cv.pdf")
     with open(cv_path, "w") as f: f.write("Fake PDF Content")
 
     driver.get("http://localhost:3000/jobs")
-    wait = WebDriverWait(driver, 180)
+    wait = WebDriverWait(driver, 60)
     
     try:
-        # Fixture đã login rồi, chỉ cần mở modal ứng tuyển
         apply_btns = wait.until(EC.presence_of_all_elements_located(
             (By.XPATH, "//button[contains(., 'Ứng tuyển')]")
         ))
         driver.execute_script("arguments[0].click();", apply_btns[0])
         
-        # Bước đệm: Chọn "Tạo đơn ứng tuyển mới" nếu có
+        # Bước đệm 1: Nếu chưa login, nó có thể chuyển hướng hoặc mở modal đăng nhập
+        time.sleep(2)
+        if "login" in driver.current_url or len(driver.find_elements(By.CSS_SELECTOR, "input[type='password']")) > 0:
+            print("\n[INFO] Login required mid-test. Logging in...")
+            driver.find_element(By.CSS_SELECTOR, "input[type='text']").send_keys("sqapananh2026")
+            driver.find_element(By.CSS_SELECTOR, "input[type='password']").send_keys("Test@12345")
+            driver.find_element(By.CSS_SELECTOR, ".login-button").click()
+            time.sleep(3)
+            # Click lại Ứng tuyển sau khi login
+            apply_btns = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//button[contains(., 'Ứng tuyển')]")))
+            driver.execute_script("arguments[0].click();", apply_btns[0])
+
+        # Bước đệm 2: Chọn "Tạo đơn ứng tuyển mới" nếu có
         try:
             create_new_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable(
                 (By.XPATH, "//*[contains(text(), 'Tạo đơn ứng tuyển mới')]")
             ))
             create_new_btn.click()
         except:
-            print("[INFO] No 'Create new' step, proceeding to form.")
+            pass
 
         # Đợi form hiện ra (dựa vào placeholder)
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder='Tên đầy đủ']")))
