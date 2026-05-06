@@ -21,23 +21,22 @@ def driver():
     options = webdriver.ChromeOptions()
     options.add_argument('--start-maximized')
     driver = webdriver.Chrome(options=options)
-    driver.implicitly_wait(10)
+    driver.implicitly_wait(5)
     
-    # --- TỰ ĐỘNG ĐĂNG NHẬP TRƯỚC KHI TEST (sqapananh2026 / Test@12345) ---
+    # --- TỰ ĐỘNG ĐĂNG NHẬP TRƯỚC KHI TEST ---
     driver.get("http://localhost:3000/auth/login")
-    wait = WebDriverWait(driver, 15)
+    wait = WebDriverWait(driver, 120)
     try:
-        if "login" in driver.current_url:
-            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text'], input[placeholder='Email/Username']"))).send_keys("sqapananh2026")
-            driver.find_element(By.CSS_SELECTOR, "input[type='password']").send_keys("Test@12345")
-            login_btn = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], .login-button")
-            driver.execute_script("arguments[0].click();", login_btn)
-            time.sleep(2)
-            print("Auto-login successful!")
-        else:
-            print("Already logged in or redirected!")
+        # Chờ trang login load xong
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text'], input[type='email']"))).send_keys("sqapananh2026")
+        driver.find_element(By.CSS_SELECTOR, "input[type='password']").send_keys("Test@12345")
+        driver.find_element(By.CSS_SELECTOR, "button[type='submit'], .login-button").click()
+        # CHỜ đến khi URL không còn là /auth/login nữa => login thành công
+        wait.until(EC.url_changes("http://localhost:3000/auth/login"))
+        time.sleep(2)
+        print("Auto-login successful! URL:", driver.current_url)
     except Exception as e:
-        print(f"Auto-login warning: {str(e)}")
+        print(f"Auto-login FAILED: {str(e)[:80]}")
     
     yield driver
     driver.quit()
@@ -67,8 +66,32 @@ def test_TC_SYS_002_ApplyCV_Full_Flow_With_Rollback(driver):
     cv_path = os.path.abspath("test_cv.pdf")
     with open(cv_path, "w") as f: f.write("Fake PDF Content")
 
+    # === PRE-CLEANUP: Xóa record cũ từ tất cả bảng liên quan (FK order) ===
+    def full_cleanup(cur):
+        cur.execute("SELECT id FROM candidate_info_apply WHERE email LIKE 'auto_test_%'")
+        old_ids = [r[0] for r in cur.fetchall()]
+        if old_ids:
+            # Xóa child tables trước (FK)
+            cur.execute("DELETE FROM job_ad_process_candidate WHERE candidate_info_id = ANY(%s)", (old_ids,))
+            cur.execute("DELETE FROM job_ad_candidate WHERE candidate_info_id = ANY(%s)", (old_ids,))
+            cur.execute("DELETE FROM candidate_info_apply WHERE id = ANY(%s)", (old_ids,))
+            print(f"\n[PRE-CLEANUP] Removed {len(old_ids)} stale auto_test apply chains.")
+        else:
+            print("[PRE-CLEANUP] No stale records found.")
+
+    try:
+        conn_clean = psycopg2.connect(**DB_CONFIG)
+        cur_clean = conn_clean.cursor()
+        full_cleanup(cur_clean)
+        conn_clean.commit()
+        cur_clean.close()
+        conn_clean.close()
+    except Exception as e:
+        print(f"[PRE-CLEANUP WARNING] {e}")
+
     driver.get("http://localhost:3000/jobs")
     wait = WebDriverWait(driver, 60)
+
     
     try:
         apply_btns = wait.until(EC.presence_of_all_elements_located(
@@ -84,6 +107,8 @@ def test_TC_SYS_002_ApplyCV_Full_Flow_With_Rollback(driver):
             driver.find_element(By.CSS_SELECTOR, "input[type='password']").send_keys("Test@12345")
             driver.find_element(By.CSS_SELECTOR, ".login-button").click()
             time.sleep(3)
+            # Đảm bảo quay lại đúng trang jobs
+            driver.get("http://localhost:3000/jobs")
             # Click lại Ứng tuyển sau khi login
             apply_btns = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//button[contains(., 'Ứng tuyển')]")))
             driver.execute_script("arguments[0].click();", apply_btns[0])
@@ -97,13 +122,25 @@ def test_TC_SYS_002_ApplyCV_Full_Flow_With_Rollback(driver):
         except:
             pass
 
-        # Đợi form hiện ra (dựa vào placeholder)
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder='Tên đầy đủ']")))
+        # Đợi form hiện ra và field phải clickable (không disabled)
+        name_field = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[placeholder='Tên đầy đủ']")))
+        time.sleep(1)  # Chờ thêm React render xong
+        
+        # Dùng JS để điền giá trị và trigger React's onChange event
+        def js_fill(element, value):
+            driver.execute_script(
+                "var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
+                "nativeInputValueSetter.call(arguments[0], arguments[1]);"
+                "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));"
+                "arguments[0].dispatchEvent(new Event('change', { bubbles: true }));",
+                element, value
+            )
 
-        # Điền form bằng placeholder
-        driver.find_element(By.CSS_SELECTOR, "input[placeholder='Tên đầy đủ']").send_keys("Auto Tester")
-        driver.find_element(By.CSS_SELECTOR, "input[placeholder='Email']").send_keys(test_email)
-        driver.find_element(By.CSS_SELECTOR, "input[placeholder='SĐT']").send_keys("0987654321")
+        js_fill(name_field, "Auto Tester")
+        email_field = driver.find_element(By.CSS_SELECTOR, "input[placeholder='Email']")
+        js_fill(email_field, test_email)
+        phone_field = driver.find_element(By.CSS_SELECTOR, "input[placeholder='SĐT']")
+        js_fill(phone_field, "0987654321")
         
         # Upload file (Tìm input file ẩn)
         file_input = driver.find_element(By.CSS_SELECTOR, "input[type='file']")
@@ -118,17 +155,21 @@ def test_TC_SYS_002_ApplyCV_Full_Flow_With_Rollback(driver):
         print(f"\n[STEP] Applied for {test_email}. Waiting for DB...")
         time.sleep(5) 
 
-        # Database Check & Rollback
+        # Database Check & Full Rollback (xóa đúng thứ tự FK)
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
         cur.execute("SELECT id FROM candidate_info_apply WHERE email = %s", (test_email,))
         record = cur.fetchone()
         
         if record:
-            print(f"[PASSED] DB Check: Found record ID={record[0]}")
-            cur.execute("DELETE FROM candidate_info_apply WHERE id = %s", (record[0],))
+            apply_id = record[0]
+            print(f"[PASSED] DB Check: Found record ID={apply_id}")
+            # Xóa child tables trước
+            cur.execute("DELETE FROM job_ad_process_candidate WHERE candidate_info_id = %s", (apply_id,))
+            cur.execute("DELETE FROM job_ad_candidate WHERE candidate_info_id = %s", (apply_id,))
+            cur.execute("DELETE FROM candidate_info_apply WHERE id = %s", (apply_id,))
             conn.commit()
-            print(f"[ROLLBACK SUCCESS] Deleted test record {record[0]}.")
+            print(f"[ROLLBACK SUCCESS] Full chain deleted for apply_id={apply_id}.")
         else:
             pytest.fail(f"TC_SYS_002 FAIL: Record not found for {test_email}")
             
