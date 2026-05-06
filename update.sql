@@ -1,0 +1,1 @@
+UPDATE email_config SET email = 'a63959001@smtp-brevo.com', password = 'xsmtpsib-fd52b697ef5ffe7ce6ac4f7d62c4ae0a961e3466271d7ce17d01b9c7940b3cd7-2FrUlpCgCExHjia6' WHERE email = '784652002@smtp-brevo.com';
