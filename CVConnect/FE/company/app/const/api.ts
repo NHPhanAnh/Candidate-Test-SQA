@@ -1,0 +1,4 @@
+export const STATUS_CODE = {
+  TOKEN_EXPIRED: 103,
+  TOKEN_INVALID: 104,
+};

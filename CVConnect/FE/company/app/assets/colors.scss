@@ -1,0 +1,64 @@
+// ===============================
+// Primary (Deep Red - based on #990011)
+// ===============================
+$color-primary-50: #f9e6e8; // very light tint
+$color-primary-100: #f2ccd1;
+$color-primary-200: #e699a3;
+$color-primary-300: #d96675;
+$color-primary-400: #c90a1f;
+$color-primary-500: #990011; // main brand red
+$color-primary-600: #80000f;
+$color-primary-700: #66000c;
+$color-primary-800: #4d0009;
+$color-primary-900: #330006; // deep wine red
+
+// ===============================
+// Secondary (Contrast Neutrals - #FCF6F5 & #2E2E2E)
+// ===============================
+$color-secondary-50: #FCF6F5; // very light neutral
+$color-secondary-100: #f7efee;
+$color-secondary-200: #f0e0de;
+$color-secondary-300: #e6cfcc;
+$color-secondary-400: #d6b6b1;
+$color-secondary-500: #c09b95;
+$color-secondary-600: #a37f78;
+$color-secondary-700: #7e5d56;
+$color-secondary-800: #503c36;
+$color-secondary-900: #2E2E2E; // dark neutral anchor
+
+// ===============================
+// Neutral / Gray
+// ===============================
+$color-gray-50: #f9fafb;
+$color-gray-100: #f3f4f6;
+$color-gray-200: #e5e7eb;
+$color-gray-300: #d1d5db;
+$color-gray-400: #9ca3af;
+$color-gray-500: #6b7280;
+$color-gray-600: #4b5563;
+$color-gray-700: #374151;
+$color-gray-800: #1f2937;
+$color-gray-900: #111827;
+
+// ===============================
+// Functional Colors
+// ===============================
+$color-success: #10b981; // calming green
+$color-danger: #ef4444; // red
+$color-warning: #f59e0b; // warm amber
+$color-info: #007BC3; // now matches new primary
+
+// Misc
+$color-lime: #80cc23;
+$color-google-green: #0e7f48;
+$color-goldenrod: #DAA520;
+
+// ===============================
+// Background & Text
+// ===============================
+$background-light: $color-gray-50;
+$background-dark: $color-gray-900;
+$text-light: $color-gray-900;
+$text-dark: $color-gray-50;
+$background-light-hover: $color-gray-200;
+$text-light-hover: $color-gray-900;
